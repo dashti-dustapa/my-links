@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/.com",
+      "destination": "https://haqarat.vercel.app/",
+      "permanent": false
+    }
+  ]
+}
