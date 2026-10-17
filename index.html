@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="ku" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>گۆڕەری لینک - کورتکەرەوەی بەستەر</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;600;700&display=swap');
+    body { font-family: 'Vazirmatn', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen flex flex-col items-center py-12 px-4">
+
+  <!-- بەشی ڕیدایرێکت کردن کاتێک لینکێک دەکرێتەوە -->
+  <div id="redirect-screen" class="hidden fixed inset-0 bg-slate-950 z-50 flex flex-col items-center justify-center">
+    <div class="animate-spin rounded-full h-14 w-14 border-t-4 border-indigo-500 mb-4"></div>
+    <h2 class="text-xl font-bold text-slate-200">تکایە چاوەڕێ بکە، ئێستا دەچیتە سەر لینکەکە...</h2>
+  </div>
+
+  <!-- ڕووکاری سەرەکی سایتەکە (UI) -->
+  <div class="max-w-xl w-full bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl">
+    <div class="text-center mb-8">
+      <h1 class="text-2xl md:text-3xl font-bold text-indigo-400 mb-2">گۆڕینی لینک بە دڵی خۆت</h1>
+      <p class="text-slate-400 text-sm">لینکەکەت لێرە دابنێ و بەشی کۆتاییەکەی بگۆڕە بۆ هەر ناوێک کە دەتەوێت</p>
+    </div>
+
+    <div class="space-y-5">
+      <!-- خانەی لینکی ئەسڵی -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-300 mb-2">١. لینکە درێژەکەت لێرە دابنێ (Paste URL):</label>
+        <input id="long-url" type="url" dir="ltr" placeholder="https://example.com/very-long-link" 
+          class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500">
+      </div>
+
+      <!-- خانەی گۆڕینی کۆتایی لینکەکە -->
+      <div>
+        <label class="block text-sm font-semibold text-slate-300 mb-2">٢. دەتەوێت کۆتایی لینکەکەت چی بێت؟</label>
+        <div class="flex items-center bg-slate-800 border border-slate-700 rounded-xl overflow-hidden focus-within:border-indigo-500" dir="ltr">
+          <span id="domain-prefix" class="bg-slate-800/80 text-slate-400 px-3 py-3 text-sm border-r border-slate-700 select-none"></span>
+          <input id="custom-slug" type="text" placeholder="my-custom-name" 
+            class="w-full bg-transparent px-3 py-3 text-white focus:outline-none">
+        </div>
+      </div>
+
+      <!-- دوگمەی دروستکردن -->
+      <button onclick="createShortLink()" 
+        class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3.5 rounded-xl transition shadow-lg shadow-indigo-600/30">
+        گۆڕینی لینک و دروستکردن
+      </button>
+    </div>
+
+    <!-- پیشاندانی ئەنجام -->
+    <div id="result-box" class="hidden mt-6 p-4 bg-emerald-950/40 border border-emerald-700/50 rounded-xl">
+      <p class="text-emerald-400 text-xs font-semibold mb-2">لینکە نوێیەکەت ئامادەیە:</p>
+      <div class="flex items-center justify-between gap-2 bg-slate-950 p-2.5 rounded-lg border border-slate-800" dir="ltr">
+        <a id="generated-link" href="#" target="_blank" class="text-indigo-400 hover:underline text-sm truncate font-mono"></a>
+        <button onclick="copyLink()" id="copy-btn" class="bg-slate-800 hover:bg-slate-700 text-xs px-3 py-1.5 rounded-md text-white shrink-0">
+          کۆپیکردن (Copy)
+        </button>
+      </div>
+    </div>
+
+    <!-- لیستی لینکەکانی پێشوو -->
+    <div class="mt-8 pt-6 border-t border-slate-800">
+      <h3 class="text-sm font-semibold text-slate-300 mb-3">لینکە دروستکراوەکانت:</h3>
+      <div id="links-list" class="space-y-2 text-sm text-slate-400"></div>
+    </div>
+  </div>
+
+  <script>
+    // پیشاندانی ناوی دۆمەینی سایتەکەت بە ئۆتۆماتیکی
+    const currentOrigin = window.location.origin;
+    document.getElementById('domain-prefix').innerText = currentOrigin + '/?';
+
+    // پشکنین بۆ ئەوەی بزانێت کەسێک لینکێکی کورتکراوەی کردووەتەوە یان نا
+    function checkRedirect() {
+      const query = window.location.search.substring(1);
+      if (!query) return;
+
+      const params = new URLSearchParams(window.location.search);
+      const directTarget = params.get('to');
+      const savedLinks = JSON.parse(localStorage.getItem('my_custom_links') || '{}');
+
+      // ئەگەر لەناو سایتەکە خەزن کرابێت
+      if (savedLinks[query]) {
+        document.getElementById('redirect-screen').classList.remove('hidden');
+        window.location.replace(savedLinks[query]);
+        return;
+      }
+      // ئەگەر لینکەکە بۆ کەسێکی تر نێردرابێت
+      if (directTarget) {
+        document.getElementById('redirect-screen').classList.remove('hidden');
+        try {
+          window.location.replace(atob(directTarget));
+        } catch (e) {
+          window.location.replace(directTarget);
+        }
+      }
+    }
+
+    function createShortLink() {
+      let longUrl = document.getElementById('long-url').value.trim();
+      let slug = document.getElementById('custom-slug').value.trim().replace(/\s+/g, '-');
+
+      if (!longUrl) {
+        alert('تکایە سەرەتا لینکەکەت دابنێ!');
+        return;
+      }
+      if (!/^https?:\/\//i.test(longUrl)) {
+        longUrl = 'https://' + longUrl;
+      }
+      if (!slug) {
+        slug = Math.random().toString(36).substring(2, 7);
+      }
+
+      // خەزنکردنی لینکەکە
+      const savedLinks = JSON.parse(localStorage.getItem('my_custom_links') || '{}');
+      savedLinks[slug] = longUrl;
+      localStorage.setItem('my_custom_links', JSON.stringify(savedLinks));
+
+      const finalUrl = `${currentOrigin}/?${slug}`;
+      const linkEl = document.getElementById('generated-link');
+      linkEl.href = finalUrl;
+      linkEl.innerText = finalUrl;
+      document.getElementById('result-box').classList.remove('hidden');
+
+      renderLinks();
+    }
+
+    function copyLink() {
+      const text = document.getElementById('generated-link').innerText;
+      navigator.clipboard.writeText(text);
+      const btn = document.getElementById('copy-btn');
+      btn.innerText = 'کۆپی کرا ✓';
+      setTimeout(() => btn.innerText = 'کۆپیکردن (Copy)', 2000);
+    }
+
+    function deleteLink(slug) {
+      const savedLinks = JSON.parse(localStorage.getItem('my_custom_links') || '{}');
+      delete savedLinks[slug];
+      localStorage.setItem('my_custom_links', JSON.stringify(savedLinks));
+      renderLinks();
+    }
+
+    function renderLinks() {
+      const list = document.getElementById('links-list');
+      const savedLinks = JSON.parse(localStorage.getItem('my_custom_links') || '{}');
+      const keys = Object.keys(savedLinks);
+
+      if (keys.length === 0) {
+        list.innerHTML = '<p class="text-xs text-slate-500">هیچ لینکێکت دروست نەکردووە تا ئێستا.</p>';
+        return;
+      }
+
+      list.innerHTML = keys.map(slug => `
+        <div class="flex items-center justify-between bg-slate-800/60 p-2.5 rounded-lg border border-slate-800" dir="ltr">
+          <div class="truncate pr-3">
+            <a href="${currentOrigin}/?${slug}" target="_blank" class="text-indigo-400 font-mono text-xs hover:underline">${currentOrigin}/?${slug}</a>
+            <p class="text-slate-500 text-xs truncate">${savedLinks[slug]}</p>
+          </div>
+          <button onclick="deleteLink('${slug}')" class="text-rose-400 hover:text-rose-300 text-xs px-2 py-1">سڕینەوە</button>
+        </div>
+      `).join('');
+    }
+
+    checkRedirect();
+    renderLinks();
+  </script>
+</body>
+</html>
